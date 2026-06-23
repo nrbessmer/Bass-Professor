@@ -1,0 +1,9 @@
+build/
+Builds/
+juce/
+JUCE/
+*.DS_Store
+.vscode/
+*.o
+*.a
+JuceLibraryCode/
