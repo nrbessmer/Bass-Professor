@@ -18,6 +18,7 @@ namespace BPColours
     const juce::Colour track        { 0xff32383f };
     const juce::Colour textBright   { 0xffe8eaed };
     const juce::Colour textDim      { 0xff8b929c };
+    const juce::Colour neonGreen    { 0xff39ff14 }; // neon green for preset name + description
 }
 
 class BassProfessorLookAndFeel : public juce::LookAndFeel_V4

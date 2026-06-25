@@ -41,6 +41,14 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    // --- Presets ---
+    int getNumBassPresets() const;
+    juce::StringArray getBassPresetNames() const;
+    juce::String getBassPresetCategory(int index) const;
+    juce::String getBassPresetDescription(int index) const;
+    void applyBassPreset(int index);
+    int getCurrentBassPreset() const { return currentPreset; }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -53,10 +61,16 @@ private:
     UndertowVoice monoVoice;
     std::vector<std::pair<int, float>> heldNotes; // (midiNote, velocity), most recent at back
 
-    void handleMonoMidi(const juce::MidiBuffer& midiMessages);
+    void applyMonoMidiEvent(const juce::MidiMessage& msg);
+    void renderMonoBlock(juce::AudioBuffer<float>& buffer,
+                         const juce::MidiBuffer& midiMessages,
+                         int startSample, int numSamples);
 
     juce::dsp::Chorus<float> chorus;
     StereoDelay delay;
+    juce::dsp::Reverb reverb;
+
+    int currentPreset = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UndertowAudioProcessor)
 };

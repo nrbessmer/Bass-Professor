@@ -111,6 +111,12 @@ namespace Params
     constexpr auto delayFeedback = "delayFeedback";
     constexpr auto delayMix      = "delayMix";
 
+    constexpr auto reverbEnable = "reverbEnable";
+    constexpr auto reverbRoom   = "reverbRoom";
+    constexpr auto reverbDamp   = "reverbDamp";
+    constexpr auto reverbWet    = "reverbWet";
+    constexpr auto reverbWidth  = "reverbWidth";
+
     // Voicing
     constexpr auto polyphonyMode = "polyphonyMode"; // 0 = Poly, 1 = Mono
     constexpr auto glideTimeMs   = "glideTimeMs";
@@ -256,6 +262,12 @@ namespace Params
         floatParam(delayTimeMs, "Delay Time", juce::NormalisableRange<float>(1.0f, 1000.0f, 0.1f, 0.4f), 250.0f, "ms");
         floatParam(delayFeedback, "Delay Feedback", { 0.0f, 0.95f, 0.001f }, 0.35f);
         floatParam(delayMix, "Delay Mix", { 0.0f, 1.0f, 0.001f }, 0.25f);
+
+        boolParam(reverbEnable, "Reverb On", false);
+        floatParam(reverbRoom,  "Room Size",  { 0.0f, 1.0f, 0.001f }, 0.5f);
+        floatParam(reverbDamp,  "Damping",    { 0.0f, 1.0f, 0.001f }, 0.5f);
+        floatParam(reverbWet,   "Reverb Wet", { 0.0f, 1.0f, 0.001f }, 0.25f);
+        floatParam(reverbWidth, "Width",      { 0.0f, 1.0f, 0.001f }, 1.0f);
 
         // --- Voicing ---
         choiceParam(polyphonyMode, "Polyphony Mode", { "Poly", "Mono" }, 0);

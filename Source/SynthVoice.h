@@ -68,6 +68,17 @@ private:
     float noteValueIncrement = 0.0f;
     int glideSamplesRemaining = 0;
 
+    // De-click gain: a 64-sample linear ramp applied at note start (0→1)
+    // and when stopNote is called with allowTailOff=false (1→0). This
+    // eliminates the audible click that occurs when the oscillator or filter
+    // state is discontinuous at the boundary — most noticeable on soft,
+    // short presses and at fast attack/release times.
+    float deClickGain = 1.0f;
+    float deClickTarget = 1.0f;
+    bool deClickPendingClear = false;   // true → clear voice once gain hits 0
+    bool deClickRetrigger = false;      // true → retrigger envelopes once gain hits 0
+    static constexpr float kDeClickRate = 1.0f / 64.0f; // ~1.5 ms at 44.1 kHz
+
     float computeNoteValue(int midiNoteNumber) const;
     void setGlideTarget(float newTargetNoteValue, float glideTimeSeconds);
 

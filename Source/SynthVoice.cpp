@@ -206,6 +206,12 @@ void UndertowVoice::startNote(int midiNoteNumber, float velocity,
     filterL.reset();
     filterR.reset();
 
+    // Ramp from silence to prevent onset click regardless of attack time.
+    deClickGain = 0.0f;
+    deClickTarget = 1.0f;
+    deClickPendingClear = false;
+    deClickRetrigger = false;
+
     ampEnv.noteOn();
     modEnv.noteOn();
 }
@@ -224,21 +230,31 @@ void UndertowVoice::glideToNote(int midiNoteNumber, float velocity, float glideT
     // makes this sound like a slide rather than a re-pluck.
     if (retriggerEnvelope)
     {
-        ampEnv.noteOn();
-        modEnv.noteOn();
+        // Fade out first so ampEnv.noteOn() restarts from 0 without a
+        // mid-envelope discontinuity click. renderNextBlock() completes
+        // the retrigger once the ramp reaches silence.
+        deClickTarget = 0.0f;
+        deClickRetrigger = true;
     }
 }
 
 void UndertowVoice::stopNote(float, bool allowTailOff)
 {
-    ampEnv.noteOff();
-    modEnv.noteOff();
-
-    if (!allowTailOff)
+    if (allowTailOff)
     {
-        clearCurrentNote();
-        ampEnv.reset();
-        modEnv.reset();
+        // Normal note-off: let the ADSR release tail play out naturally.
+        ampEnv.noteOff();
+        modEnv.noteOff();
+    }
+    else
+    {
+        // Hard stop (e.g. voice steal). DO NOT reset the envelope here — that
+        // immediately zeros ampLevel, making the de-click ramp multiply by 0
+        // and do nothing. Instead, leave the envelope running at its current
+        // level and ramp *output* gain to 0 via deClickGain. The envelope
+        // reset happens in renderNextBlock once the ramp completes.
+        deClickTarget = 0.0f;
+        deClickPendingClear = true;
     }
 }
 
@@ -339,7 +355,9 @@ void UndertowVoice::updateParametersFromState()
     ampParams.attack  = pAmpAttack->load();
     ampParams.decay   = pAmpDecay->load();
     ampParams.sustain = pAmpSustain->load();
-    ampParams.release = pAmpRelease->load();
+    // Enforce a 5 ms minimum release — prevents zero-release clicks when a key
+    // is released during the attack phase before the de-click ramp completes.
+    ampParams.release = juce::jmax(0.005f, pAmpRelease->load());
     ampEnv.setParameters(ampParams);
 
     juce::ADSR::Parameters modParams;
@@ -492,19 +510,55 @@ void UndertowVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         filterL.setCutoffAndResonance(cutoffHz, resonance);
         filterR.setCutoffAndResonance(cutoffHz, resonance);
 
-        const float filteredL = filterL.processSample(oscL);
-        const float filteredR = filterR.processSample(oscR);
+        // Advance the de-click ramp BEFORE feeding the filter.
+        // If we advanced it after, the filter would accumulate full-amplitude
+        // oscillator signal while deClickGain was still 0, then release that
+        // stored energy as a burst/click once the ramp completed.
+        if (deClickGain < deClickTarget)
+            deClickGain = juce::jmin(deClickTarget, deClickGain + kDeClickRate);
+        else if (deClickGain > deClickTarget)
+            deClickGain = juce::jmax(deClickTarget, deClickGain - kDeClickRate);
+
+        // Gate the oscillator into the filter — this ensures the filter state
+        // builds up and decays in sync with the declick ramp.
+        const float filteredL = filterL.processSample(oscL * deClickGain);
+        const float filteredR = filterR.processSample(oscR * deClickGain);
 
         const float gain = ampLevel * currentVelocity;
 
         if (left != nullptr)  left[s]  += filteredL * gain;
         if (right != nullptr) right[s] += filteredR * gain;
 
+        // Normal ADSR voice-done check.
         if (!ampEnv.isActive() && ampLevel <= 0.0001f)
         {
             clearCurrentNote();
             currentMidiNote = -1;
             break;
+        }
+
+        // De-click action when gain reaches 0.
+        if (deClickGain <= 0.0f)
+        {
+            if (deClickRetrigger)
+            {
+                // Retrigger envelopes cleanly from zero — no discontinuity.
+                ampEnv.noteOn();
+                modEnv.noteOn();
+                deClickTarget = 1.0f;
+                deClickRetrigger = false;
+            }
+            else if (deClickPendingClear)
+            {
+                // Hard-stop: envelopes were kept running during the fade;
+                // reset them now that gain is at zero.
+                ampEnv.reset();
+                modEnv.reset();
+                clearCurrentNote();
+                currentMidiNote = -1;
+                deClickPendingClear = false;
+                break;
+            }
         }
     }
 }

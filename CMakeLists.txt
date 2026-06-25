@@ -43,6 +43,7 @@ target_sources(BassProfessor PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/SynthVoice.cpp
+    Source/Presets.cpp
 )
 
 # Expose Source/ so headers resolve cleanly.

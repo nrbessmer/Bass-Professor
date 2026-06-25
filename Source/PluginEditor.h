@@ -17,8 +17,26 @@ private:
     UndertowAudioProcessor& processor;
     BassProfessorLookAndFeel lnf;
 
-    static constexpr int headerHeight = 56;
+    static constexpr int headerHeight = 74;
     int requiredHeight = 1000;
+
+    // Preset selector (lives in the header bar).
+    juce::ComboBox presetBox;
+    juce::TextButton prevButton { "<" };
+    juce::TextButton nextButton { ">" };
+    juce::Label presetDescription;
+    void populatePresetBox();
+    void syncPresetBox();
+    void applyPresetByBoxId(int comboId);
+    void stepPreset(int delta);
+    void updatePresetDescription();
+
+    // Logo image (loaded from BinaryData if available, blank otherwise).
+    juce::Image logoImage;
+
+    // Row zone bounds computed in resized(), used in paint() for row backgrounds.
+    std::vector<juce::Rectangle<int>> rowZones;
+    static const juce::String rowLabels[4];
 
     using APVTS = juce::AudioProcessorValueTreeState;
 
@@ -56,10 +74,12 @@ private:
     std::vector<std::unique_ptr<Toggle>> allToggles;
     std::vector<std::unique_ptr<Section>> sections;
 
-    Knob& addKnob(Section& section, const juce::String& paramID, const juce::String& labelText);
-    Combo& addCombo(Section& section, const juce::String& paramID, const juce::String& labelText);
-    Toggle& addToggle(Section& section, const juce::String& paramID, const juce::String& labelText);
+    Knob& addKnob(Section& section, const juce::String& paramID, const juce::String& labelText, const juce::String& tip = {});
+    Combo& addCombo(Section& section, const juce::String& paramID, const juce::String& labelText, const juce::String& tip = {});
+    Toggle& addToggle(Section& section, const juce::String& paramID, const juce::String& labelText, const juce::String& tip = {});
     Section& addSection(const juce::String& title);
+
+    juce::TooltipWindow tooltipWindow { this, 500 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UndertowAudioProcessorEditor)
 };
