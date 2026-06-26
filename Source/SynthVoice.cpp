@@ -184,6 +184,23 @@ void UndertowVoice::setGlideTarget(float newTargetNoteValue, float glideTimeSeco
 void UndertowVoice::startNote(int midiNoteNumber, float velocity,
                                juce::SynthesiserSound*, int currentPitchWheelPosition)
 {
+    // If the voice is currently audible (deClickGain > 0 means it's producing
+    // output) we must NOT zero deClickGain immediately — that hard-cuts the
+    // signal mid-sample and creates an audible click. Instead, store the
+    // incoming note parameters and let the declick ramp fade to silence first.
+    // renderNextBlock()'s retrigger handler will apply everything once quiet.
+    if (deClickGain > 0.0f && currentMidiNote >= 0)
+    {
+        pendingMidiNote   = midiNoteNumber;
+        pendingVelocity   = velocity;
+        pendingPitchWheel = currentPitchWheelPosition;
+        deClickTarget     = 0.0f;
+        deClickPendingClear = false;
+        deClickRetrigger  = true;
+        return;
+    }
+
+    // Voice is already silent — start immediately.
     currentMidiNote = midiNoteNumber;
     currentVelocity = velocity;
     pitchWheelSemitones = ((float) currentPitchWheelPosition - 8192.0f) / 8192.0f * 2.0f;
@@ -211,8 +228,15 @@ void UndertowVoice::startNote(int midiNoteNumber, float velocity,
     deClickTarget = 1.0f;
     deClickPendingClear = false;
     deClickRetrigger = false;
+    pendingMidiNote = -1;
 
+    // Reset output smoother so it doesn't carry over state from a previous note.
+    outSmoothL = 0.0f;
+    outSmoothR = 0.0f;
+
+    ampEnv.reset();
     ampEnv.noteOn();
+    modEnv.reset();
     modEnv.noteOn();
 }
 
@@ -233,8 +257,13 @@ void UndertowVoice::glideToNote(int midiNoteNumber, float velocity, float glideT
         // Fade out first so ampEnv.noteOn() restarts from 0 without a
         // mid-envelope discontinuity click. renderNextBlock() completes
         // the retrigger once the ramp reaches silence.
-        deClickTarget = 0.0f;
+        deClickTarget    = 0.0f;
         deClickRetrigger = true;
+        pendingNoteOff   = false;
+        // A previous startNote() may have stored a pending note while the
+        // voice was still audible. That pending note is now superseded by
+        // this glide; clear it so the retrigger handler doesn't re-apply it.
+        pendingMidiNote  = -1;
     }
 }
 
@@ -242,9 +271,26 @@ void UndertowVoice::stopNote(float, bool allowTailOff)
 {
     if (allowTailOff)
     {
-        // Normal note-off: let the ADSR release tail play out naturally.
+        if (deClickRetrigger)
+        {
+            // A retrigger fade is in progress — the pending noteOn hasn't fired yet.
+            // Flag the note-off so the retrigger handler can issue it immediately
+            // after noteOn(), giving the note its proper attack+release shape rather
+            // than leaving the voice stuck open indefinitely.
+            pendingNoteOff = true;
+            return;
+        }
+
+        // Normal note-off: trigger ADSR release.
         ampEnv.noteOff();
         modEnv.noteOff();
+
+        // If the onset declick ramp hasn't finished yet (very quick/light keypress),
+        // reverse it back toward 0. Without this, deClickGain keeps climbing while
+        // the ADSR is releasing — the filter accumulates signal into a dying note
+        // and cuts off abruptly when the voice clears, causing an audible click.
+        if (deClickGain < 1.0f)
+            deClickTarget = 0.0f;
     }
     else
     {
@@ -519,18 +565,30 @@ void UndertowVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         else if (deClickGain > deClickTarget)
             deClickGain = juce::jmax(deClickTarget, deClickGain - kDeClickRate);
 
-        // Gate the oscillator into the filter — this ensures the filter state
-        // builds up and decays in sync with the declick ramp.
+        // Gate the oscillator INTO the filter so filter state builds/decays
+        // with the ramp rather than accumulating at full amplitude.
         const float filteredL = filterL.processSample(oscL * deClickGain);
         const float filteredR = filterR.processSample(oscR * deClickGain);
 
-        const float gain = ampLevel * currentVelocity;
+        // Also apply deClickGain to the OUTPUT. A resonant filter continues to
+        // ring (output signal) even when its input is 0 — without this second
+        // gate that ringing plays at full volume = audible crackle on note changes.
+        const float gain = ampLevel * currentVelocity * deClickGain;
 
-        if (left != nullptr)  left[s]  += filteredL * gain;
-        if (right != nullptr) right[s] += filteredR * gain;
+        // One-pole output smoother: spreads any remaining amplitude discontinuity
+        // over ~2 samples. Bass content (<2kHz) is unaffected; ultra-fast clicks are caught.
+        const float rawL = filteredL * gain;
+        const float rawR = filteredR * gain;
+        outSmoothL += kOutSmoothAlpha * (rawL - outSmoothL);
+        outSmoothR += kOutSmoothAlpha * (rawR - outSmoothR);
 
-        // Normal ADSR voice-done check.
-        if (!ampEnv.isActive() && ampLevel <= 0.0001f)
+        if (left != nullptr)  left[s]  += outSmoothL;
+        if (right != nullptr) right[s] += outSmoothR;
+
+        // Normal ADSR voice-done check. Skip if a retrigger is pending — the
+        // retrigger handler will reactivate the envelope; clearing here would
+        // swallow the incoming note.
+        if (!deClickRetrigger && !ampEnv.isActive() && ampLevel <= 0.0001f)
         {
             clearCurrentNote();
             currentMidiNote = -1;
@@ -542,9 +600,66 @@ void UndertowVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         {
             if (deClickRetrigger)
             {
-                // Retrigger envelopes cleanly from zero — no discontinuity.
+                // If this retrigger was initiated by startNote() while the voice
+                // was audible, pendingMidiNote holds the new note's params.
+                // Apply them now that we're at silence (safe to reset everything).
+                if (pendingMidiNote >= 0)
+                {
+                    currentMidiNote = pendingMidiNote;
+                    currentVelocity = pendingVelocity;
+                    pitchWheelSemitones = ((float) pendingPitchWheel - 8192.0f) / 8192.0f * 2.0f;
+
+                    const float noteValue = computeNoteValue(pendingMidiNote);
+                    currentNoteValue = noteValue;
+                    setGlideTarget(noteValue, 0.0f);
+
+                    // Fresh-start reset: oscillator phases, LFO, envelopes.
+                    oscillator.resetPhases();
+                    wtOscillator.resetPhases();
+                    fmOscillator.resetPhases();
+                    for (auto& b : bands)
+                        b.resetPhases();
+                    lfo.resetPhase();
+
+                    pendingMidiNote = -1;
+                }
+
+                // Reset filter state — the resonant filter stores energy from
+                // the previous note and would ring into the new note as gain
+                // ramps back up, causing the audible crackle. Safe to reset
+                // here because output is already 0 (deClickGain == 0).
+                filterL.reset();
+                filterR.reset();
+                xLowL.reset();  xLowR.reset();
+                xHighL.reset(); xHighR.reset();
+                midHPL.reset(); midHPR.reset();
+                midLPL.reset(); midLPR.reset();
+
+                // Always reset envelopes before noteOn so the attack shape is
+                // clean regardless of which envelope state the previous note
+                // left behind. (Legato never sets deClickRetrigger, so this
+                // path only runs for non-legato retriggering.)
+                // Also reset the output smoother — deClickGain is 0 here so
+                // output is already 0; starting the smoother at 0 prevents
+                // any leftover state from decaying into the new note's attack.
+                outSmoothL = 0.0f;
+                outSmoothR = 0.0f;
+                ampEnv.reset();
+                modEnv.reset();
                 ampEnv.noteOn();
                 modEnv.noteOn();
+
+                // If the key was released while the retrigger fade was in
+                // progress the noteOff was deferred. Apply it now so the note
+                // follows its proper attack → release shape rather than
+                // sustaining indefinitely.
+                if (pendingNoteOff)
+                {
+                    ampEnv.noteOff();
+                    modEnv.noteOff();
+                    pendingNoteOff = false;
+                }
+
                 deClickTarget = 1.0f;
                 deClickRetrigger = false;
             }

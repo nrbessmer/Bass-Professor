@@ -79,6 +79,25 @@ private:
     bool deClickRetrigger = false;      // true → retrigger envelopes once gain hits 0
     static constexpr float kDeClickRate = 1.0f / 64.0f; // ~1.5 ms at 44.1 kHz
 
+    // When startNote() is called while the voice is still audible (e.g. note
+    // replayed during release), we can't zero deClickGain immediately — that
+    // creates a hard sample discontinuity = click. Instead we store the incoming
+    // note here, fade to silence via deClickRetrigger, and apply it once quiet.
+    int   pendingMidiNote   = -1;
+    float pendingVelocity   = 0.0f;
+    int   pendingPitchWheel = 8192;
+    bool  pendingNoteOff    = false; // note-off received while retrigger fade was in progress
+
+    // One-pole lowpass smoother applied to the final per-voice output.
+    // Acts as a catch-all for any residual sample-level discontinuities that
+    // slip through the declick ramp (e.g. very rapid note changes).
+    // alpha = 0.5 → ~5 kHz cutoff at 44.1 kHz: transparent to bass content,
+    // but any ultra-fast amplitude step is spread over ~2 samples, eliminating
+    // audible clicks without affecting tone.
+    float outSmoothL = 0.0f;
+    float outSmoothR = 0.0f;
+    static constexpr float kOutSmoothAlpha = 0.5f;
+
     float computeNoteValue(int midiNoteNumber) const;
     void setGlideTarget(float newTargetNoteValue, float glideTimeSeconds);
 

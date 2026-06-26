@@ -142,18 +142,34 @@ UndertowAudioProcessorEditor::UndertowAudioProcessorEditor(UndertowAudioProcesso
     addKnob(rev,   Params::reverbWet,    "Wet",    "Reverb wet level — how much reverb is blended in.");
     addKnob(rev,   Params::reverbWidth,  "Width",  "Stereo width of the reverb field.");
 
+    // Tab buttons — one per section row.
+    const char* tabNames[numTabs] = { "SOURCE", "3-BAND", "DYNAMICS", "FX" };
+    for (int i = 0; i < numTabs; ++i)
+    {
+        tabButtons[i].setButtonText(tabNames[i]);
+        tabButtons[i].setClickingTogglesState(false);
+        tabButtons[i].onClick = [this, i]() { setActiveTab(i); };
+        addAndMakeVisible(tabButtons[i]);
+    }
+
+    // Show only the active tab's controls from the start.
+    updateControlVisibility();
+
     setResizable(true, true);
-    setResizeLimits(800, 540, 1800, 1400);
-    setSize(960, 860);
-    // First layout populates requiredHeight; snap to it so nothing clips.
+    setResizeLimits(800, 300, 1800, 900);
+    setSize(960, 480);
     resized();
-    setSize(960, juce::jlimit(540, 1400, requiredHeight));
 
     // Load logo image from embedded binary data if available.
 #if BP_HAS_LOGO_BINARY
     logoImage = juce::ImageCache::getFromMemory(LogoBinaryData::logo_png,
                                                 LogoBinaryData::logo_png_size);
 #endif
+
+    // Email link in the header — matches the dim text colour used for branding.
+    emailLink.setFont(juce::Font(11.0f), false, juce::Justification::topRight);
+    emailLink.setColour(juce::HyperlinkButton::textColourId, BPColours::textDim);
+    addAndMakeVisible(emailLink);
 
     // Preset selector in the header.
     addAndMakeVisible(presetBox);
@@ -314,6 +330,50 @@ void UndertowAudioProcessorEditor::updatePresetDescription()
         presetDescription.setText({}, juce::dontSendNotification);
 }
 
+void UndertowAudioProcessorEditor::setActiveTab(int index)
+{
+    activeTab = juce::jlimit(0, numTabs - 1, index);
+    updateControlVisibility();
+    resized();
+    repaint();
+}
+
+void UndertowAudioProcessorEditor::updateControlVisibility()
+{
+    // Row→section index mapping (mirrors rowDefs in resized()).
+    const std::vector<std::vector<size_t>> rowDefs = {
+        { 0, 1, 2, 3 },   // SOURCE
+        { 4, 5, 6 },       // 3-BAND
+        { 7, 8, 9, 10 },   // DYNAMICS
+        { 11, 12, 13 },    // FX
+    };
+
+    for (int row = 0; row < numTabs; ++row)
+    {
+        const bool vis = (row == activeTab);
+        for (size_t idx : rowDefs[row])
+        {
+            if (idx >= sections.size()) continue;
+            auto& s = *sections[idx];
+            for (auto* k : s.knobs)   { k->slider.setVisible(vis); k->label.setVisible(vis); }
+            for (auto* c : s.combos)  { c->box.setVisible(vis); c->label.setVisible(vis); }
+            for (auto* t : s.toggles) { t->button.setVisible(vis); }
+        }
+    }
+
+    // Highlight the active tab button.
+    for (int i = 0; i < numTabs; ++i)
+    {
+        tabButtons[i].setColour(juce::TextButton::buttonColourId,
+            i == activeTab ? BPColours::accent.withAlpha(0.8f)
+                           : BPColours::panel.withMultipliedBrightness(0.6f));
+        tabButtons[i].setColour(juce::TextButton::textColourOnId,
+            i == activeTab ? juce::Colours::black : BPColours::textBright);
+        tabButtons[i].setColour(juce::TextButton::textColourOffId,
+            i == activeTab ? juce::Colours::black : BPColours::textBright);
+    }
+}
+
 void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds();
@@ -324,12 +384,13 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
     g.setGradientFill(bg);
     g.fillRect(bounds);
 
-    // Logo as full-bleed watermark background — drawn at low opacity so the
-    // professor character shows through the panels, giving the UI its identity.
+    // Logo as full-bleed watermark at the bottom of the layer stack.
+    // MUST be drawn before any fills — panels use borders only (no fill)
+    // so the logo shows through at full opacity.
     if (logoImage.isValid())
     {
-        g.setOpacity(0.09f);
-        g.drawImage(logoImage, bounds.toFloat(),
+        g.setOpacity(0.30f);
+        g.drawImage(logoImage, getLocalBounds().toFloat(),
                     juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.setOpacity(1.0f);
     }
@@ -341,31 +402,27 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
     g.setColour(BPColours::accent);
     g.fillRect(header.removeFromBottom(2)); // accent underline
 
-    // Title block \u2014 occupies the left 260 px. Logo shown if embedded, else text.
+    // Title block \u2014 logo thumbnail on the left, wordmark text always shown.
     static constexpr int titleBlockW = 260;
-    const int logoSize = headerHeight - 4; // square, vertically centred with 2px margin
-    const juce::Rectangle<int> logoRect(4, 2, logoSize, logoSize);
+    const int logoSize = headerHeight - 8;
     if (logoImage.isValid())
     {
-        g.drawImageWithin(logoImage, logoRect.getX(), logoRect.getY(),
-                          logoRect.getWidth(), logoRect.getHeight(),
+        g.drawImageWithin(logoImage, 4, 4, logoSize, logoSize,
                           juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize,
                           false);
     }
-    else
-    {
-        // Text fallback: constrained to titleBlockW so it never overlaps presets.
-        g.setColour(BPColours::accent);
-        g.setFont(juce::Font(22.0f, juce::Font::bold));
-        g.drawText("BASS PROFESSOR",
-                    juce::Rectangle<int>(10, 4, titleBlockW - 14, headerHeight - 22),
-                    juce::Justification::bottomLeft, false);
-        g.setColour(BPColours::textDim);
-        g.setFont(juce::Font(10.5f));
-        g.drawText("3-BAND BASS SYNTHESIZER",
-                    juce::Rectangle<int>(10, headerHeight - 20, titleBlockW - 14, 16),
-                    juce::Justification::centredLeft, false);
-    }
+    const int textX = logoImage.isValid() ? logoSize + 8 : 10;
+    // "BASS PROFESSOR" wordmark
+    g.setColour(BPColours::accent);
+    g.setFont(juce::Font(20.0f, juce::Font::bold));
+    g.drawText("BASS PROFESSOR",
+                juce::Rectangle<int>(textX, 6, titleBlockW - textX - 4, headerHeight - 24),
+                juce::Justification::bottomLeft, false);
+    g.setColour(BPColours::textDim);
+    g.setFont(juce::Font(10.0f));
+    g.drawText("3-BAND BASS SYNTHESIZER",
+                juce::Rectangle<int>(textX, headerHeight - 20, titleBlockW - textX - 4, 16),
+                juce::Justification::centredLeft, false);
 
     // Branding (right side of header)
     g.setColour(BPColours::textDim);
@@ -373,49 +430,42 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
     auto brand = juce::Rectangle<int>(getWidth() - 360, 8, 344, headerHeight - 12);
     g.drawText(juce::String::fromUTF8("\u00A9\u2117 2026 Tully EDM Vibe"),
                 brand.removeFromTop(18), juce::Justification::topRight, false);
-    g.drawText("info@tullyedmvibe.com", brand.removeFromTop(16),
-                juce::Justification::topRight, false);
+    // email drawn by emailLink HyperlinkButton \u2014 no static text here
 
-    // Row zone backgrounds with subtle accent stripe on left edge
-    const juce::Colour rowBg[4] = {
-        BPColours::panel.brighter(0.06f),
-        BPColours::panel.brighter(0.02f),
-        BPColours::panel.brighter(0.04f),
-        BPColours::panel,
-    };
+    // Tab strip underline.
+    g.setColour(BPColours::accent.withAlpha(0.5f));
+    g.fillRect(0, headerHeight + tabStripH - 2, getWidth(), 2);
+
+    // Active row zone only.
     const juce::Colour rowStripe[4] = {
         BPColours::accent,
         BPColours::neonGreen.withAlpha(0.7f),
-        juce::Colour(0xff5080ff),   // cool blue for dynamics
-        juce::Colour(0xffaa44dd),   // purple for FX
+        juce::Colour(0xff5080ff),
+        juce::Colour(0xffaa44dd),
     };
-    for (int i = 0; i < (int) rowZones.size(); ++i)
+    if (activeTab < (int) rowZones.size())
     {
-        auto zone = rowZones[i].toFloat().expanded(2.0f);
-        g.setColour(rowBg[i % 4]);
-        g.fillRoundedRectangle(zone, 8.0f);
-        // Left accent stripe
+        auto zone = rowZones[activeTab].toFloat().expanded(2.0f);
+        g.setColour(rowStripe[activeTab].withAlpha(0.15f));
+        g.drawRoundedRectangle(zone, 8.0f, 1.0f);
         auto stripe = zone.withWidth(4.0f).reduced(0, 4.0f);
-        g.setColour(rowStripe[i % 4]);
+        g.setColour(rowStripe[activeTab].withAlpha(0.85f));
         g.fillRoundedRectangle(stripe, 2.0f);
-        // Row label above zone
-        g.setColour(rowStripe[i % 4].withAlpha(0.8f));
-        g.setFont(juce::Font(9.5f, juce::Font::bold));
-        g.drawText(rowLabels[i],
-                    juce::Rectangle<int>((int) zone.getX() + 10, (int) zone.getY() - 14, 200, 13),
-                    juce::Justification::centredLeft, false);
     }
 
-    // Section panels
+    // Section panels — only draw sections that belong to the active tab.
     for (auto& sectionPtr : sections)
     {
         auto& section = *sectionPtr;
+        if (section.bounds.isEmpty())
+            continue;
         auto r = section.bounds.toFloat();
 
-        // Glass-like panel: slightly lighter fill + subtle inner glow
-        g.setColour(BPColours::panel.brighter(0.08f));
+        // No fill — logo shows through. Just a subtle border so the panel
+        // boundary is visible. A very faint dark tint helps text readability.
+        g.setColour(juce::Colours::black.withAlpha(0.35f));
         g.fillRoundedRectangle(r, 7.0f);
-        g.setColour(BPColours::panelEdge.brighter(0.2f));
+        g.setColour(BPColours::panelEdge.withAlpha(0.6f));
         g.drawRoundedRectangle(r, 7.0f, 1.0f);
 
         // Section title bar — amber gradient strip across the top
@@ -437,6 +487,13 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
 
 void UndertowAudioProcessorEditor::resized()
 {
+    // ── Email hyperlink (right side of header, below copyright line) ─────────
+    {
+        // Matches the brand rect in paint(): right-aligned, 160px wide, at y=26 (8+18)
+        const int linkW = 180;
+        emailLink.setBounds(getWidth() - 8 - linkW, 26, linkW, 16);
+    }
+
     // ── Header preset block ──────────────────────────────────────────────────
     {
         static constexpr int presetLeft = 270;
@@ -451,94 +508,97 @@ void UndertowAudioProcessorEditor::resized()
         presetDescription.setBounds(presetLeft + btnW + 4, descY, boxW + btnW + 4, 15);
     }
 
-    // ── Content area ─────────────────────────────────────────────────────────
-    auto full = getLocalBounds();
-    full.removeFromTop(headerHeight);
-    auto bounds = full.reduced(10);
-    bounds.removeFromTop(16); // extra top margin for first row label
-
-    // Control cell dimensions — kept tight so the plugin fits ~960×860.
-    static constexpr int cw = 70;   // control width
-    static constexpr int ch = 76;   // control height (slider + label)
-    static constexpr int titleH = 22; // section title bar
-    static constexpr int secPad = 10; // horizontal padding inside a section
-    static constexpr int rowGap = 14; // vertical gap between rows
-    static constexpr int secGap = 6;  // horizontal gap between sections
-
-    // Compute the natural size (w, h) of a section given its control count.
-    auto natW = [&](int count, int forceCols = 0) -> int
+    // ── Tab buttons (strip just below the header) ────────────────────────────
     {
+        const int tabY  = headerHeight + 4;
+        const int tabH  = tabStripH - 8;
+        const int tabW  = 110;
+        const int tabGp = 4;
+        for (int i = 0; i < numTabs; ++i)
+            tabButtons[i].setBounds(10 + i * (tabW + tabGp), tabY, tabW, tabH);
+    }
+
+    // ── Content area (below header + tab strip) ───────────────────────────────
+    auto full = getLocalBounds();
+    full.removeFromTop(headerHeight + tabStripH);
+    auto bounds = full.reduced(10);
+    bounds.removeFromTop(10); // small top margin
+
+    // Control cell dimensions.
+    static constexpr int cw = 70;
+    static constexpr int ch = 76;
+    static constexpr int titleH = 22;
+    static constexpr int secPad = 10;
+    static constexpr int secGap = 6;
+
+    auto natW = [&](int count, int forceCols = 0) -> int {
         const int cols = forceCols > 0 ? forceCols
                          : juce::jmax(2, (int) std::ceil(std::sqrt((double) count)));
         return cols * cw + secPad;
     };
-    auto natH = [&](int count, int forceCols = 0) -> int
-    {
+    auto natH = [&](int count, int forceCols = 0) -> int {
         const int cols = forceCols > 0 ? forceCols
                          : juce::jmax(2, (int) std::ceil(std::sqrt((double) count)));
         const int rows = (count + cols - 1) / cols;
         return rows * ch + titleH + 8;
     };
-    auto ctrlCount = [&](size_t idx) -> int
-    {
+    auto ctrlCount = [&](size_t idx) -> int {
         if (idx >= sections.size()) return 0;
         auto& s = *sections[idx];
         return (int) (s.knobs.size() + s.combos.size() + s.toggles.size());
     };
 
-    // ── Row definitions (section indices in order added to editor) ───────────
-    //   0 VOICING | 1 OSCILLATOR | 2 3-BAND | 3 AM INJECTOR
-    //   4 BODY    | 5 CHARACTER  | 6 AIR
-    //   7 FILTER  | 8 AMP ENV   | 9 MOD ENV | 10 LFO
-    //  11 OUTPUT  | 12 CHORUS+DELAY | 13 REVERB
+    // Section row definitions (same as before).
     const std::vector<std::vector<size_t>> rowDefs = {
-        { 0, 1, 2, 3 },
-        { 4, 5, 6 },
-        { 7, 8, 9, 10 },
-        { 11, 12, 13 },
+        { 0, 1, 2, 3 },   // SOURCE
+        { 4, 5, 6 },       // 3-BAND
+        { 7, 8, 9, 10 },   // DYNAMICS
+        { 11, 12, 13 },    // FX
     };
 
+    // Zero all section bounds; only the active tab's sections will be set.
+    for (auto& s : sections)
+        s->bounds = {};
+
     rowZones.clear();
-    int y = bounds.getY();
+    rowZones.resize(numTabs); // keep indexed by tab number
 
-    for (const auto& row : rowDefs)
+    const auto& activeRow = rowDefs[activeTab];
+
+    // Compute row height.
+    int rowH = 0;
+    int totalNatW = 0;
+    for (size_t idx : activeRow)
     {
-        // ── Compute natural dimensions for each section in this row ──────────
-        int rowH = 0;
-        int totalNatW = 0;
-        for (size_t idx : row)
-        {
-            const int cnt = ctrlCount(idx);
-            rowH = juce::jmax(rowH, natH(cnt));
-            totalNatW += natW(cnt);
-        }
-        totalNatW += (int) (row.size() - 1) * secGap;
+        rowH = juce::jmax(rowH, natH(ctrlCount(idx)));
+        totalNatW += natW(ctrlCount(idx));
+    }
+    totalNatW += (int) (activeRow.size() - 1) * secGap;
 
-        // ── Distribute any extra width equally across sections ───────────────
-        const int extra = juce::jmax(0, bounds.getWidth() - totalNatW);
-        const int extraPer = extra / juce::jmax(1, (int) row.size());
+    const int extra    = juce::jmax(0, bounds.getWidth() - totalNatW);
+    const int extraPer = extra / juce::jmax(1, (int) activeRow.size());
 
-        int x = bounds.getX();
-        for (size_t idx : row)
-        {
-            if (idx >= sections.size()) continue;
-            auto& section = *sections[idx];
-            const int cnt  = ctrlCount(idx);
-            const int secW = natW(cnt) + extraPer;
-            section.bounds = { x, y, secW, rowH };
-            x += secW + secGap;
-        }
-
-        rowZones.push_back({ bounds.getX(), y, bounds.getWidth(), rowH });
-        y += rowH + rowGap;
+    int x = bounds.getX();
+    int y = bounds.getY();
+    for (size_t idx : activeRow)
+    {
+        if (idx >= sections.size()) continue;
+        auto& section = *sections[idx];
+        const int secW = natW(ctrlCount(idx)) + extraPer;
+        section.bounds = { x, y, secW, rowH };
+        x += secW + secGap;
     }
 
-    requiredHeight = y + headerHeight + 4;
+    rowZones[activeTab] = { bounds.getX(), y, bounds.getWidth(), rowH };
 
-    // ── Place controls within each section ───────────────────────────────────
+    requiredHeight = y + rowH + 20 + headerHeight + tabStripH;
+
+    // ── Place controls within each section (active tab only) ─────────────────
     for (auto& sectionPtr : sections)
     {
         auto& section = *sectionPtr;
+        if (section.bounds.isEmpty())
+            continue;
         const int count = (int) (section.knobs.size() + section.combos.size() + section.toggles.size());
         const int cols  = juce::jmax(2, (int) std::ceil(std::sqrt((double) count)));
 

@@ -1,0 +1,30 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOOGLE FORM — CONFIRMATION MESSAGE
+(Paste this into: Form Settings → Presentation → Confirmation message)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You're in! 🎸
+
+Thanks for signing up for Bass Professor. Check your inbox — we're sending you a download link and your personal license key right now.
+
+While you wait, follow us @tullyedmvibe for new presets, updates, and tips.
+
+Questions? Email us at info@tullyedmvibe.com
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APPS SCRIPT — REMINDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before the script will send real download links, update line 11 in
+bass-professor-apps-script.js with your actual Google Drive folder URL:
+
+  const DOWNLOAD_LINK = "https://drive.google.com/drive/folders/YOUR_FOLDER_ID_HERE";
+
+To get your folder ID:
+  1. Open the Google Drive folder containing the BassProfessor.zip
+  2. Click Share → Copy link
+  3. The URL looks like: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVw
+  4. Paste the full URL as DOWNLOAD_LINK
+
+Make sure the folder sharing is set to "Anyone with the link can view."

@@ -31,8 +31,20 @@ private:
     void stepPreset(int delta);
     void updatePresetDescription();
 
+    // Tab navigation — one tab per row of sections.
+    static constexpr int tabStripH = 34;
+    static constexpr int numTabs   = 4;
+    int activeTab = 0;
+    juce::TextButton tabButtons[numTabs];
+    void setActiveTab(int index);
+    void updateControlVisibility();
+
     // Logo image (loaded from BinaryData if available, blank otherwise).
     juce::Image logoImage;
+
+    // Clickable email link in the header — opens default mail client via mailto:.
+    juce::HyperlinkButton emailLink { "info@tullyedmvibe.com",
+                                      juce::URL ("mailto:info@tullyedmvibe.com") };
 
     // Row zone bounds computed in resized(), used in paint() for row backgrounds.
     std::vector<juce::Rectangle<int>> rowZones;
