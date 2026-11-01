@@ -1,5 +1,6 @@
 #include <map>
 #include "PluginEditor.h"
+#include "TullyLogoData.h"
 #include "Params.h"
 
 const juce::String UndertowAudioProcessorEditor::rowLabels[4] = {
@@ -534,6 +535,15 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
                 juce::Rectangle<int>(textX, headerHeight - 20, titleBlockW - textX - 4, 16),
                 juce::Justification::centredLeft, false);
 
+    // Tully EDM Vibe logo, left of the copyright / email block
+    {
+        static const juce::Image tully = juce::ImageCache::getFromMemory (TullyLogoData::png, (int) TullyLogoData::pngSize);
+        if (tully.isValid())
+        {
+            const int lh = headerHeight - 10;
+            g.drawImageWithin (tully, getWidth() - 8 - 180 - 6 - lh, 5, lh, lh, juce::RectanglePlacement::centred, false);
+        }
+    }
     // Branding (right side of header)
     g.setColour(BPColours::textDim);
     g.setFont(juce::Font(11.0f));
