@@ -42,7 +42,7 @@ public:
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                            float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-                           juce::Slider&) override
+                           juce::Slider& slider) override
     {
         const auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(4.0f);
         const float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
@@ -62,8 +62,13 @@ public:
         juce::Path value;
         value.addCentredArc(centreX, centreY, arcRadius, arcRadius, 0.0f,
                             rotaryStartAngle, angle, true);
+        if (slider.isMouseOverOrDragging())   // hover / drag glow
+        {
+            g.setColour(BPColours::accent.withAlpha(0.25f));
+            g.strokePath(value, juce::PathStrokeType(7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
         g.setColour(BPColours::accent);
-        g.strokePath(value, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath(value, juce::PathStrokeType(slider.isMouseOverOrDragging() ? 3.5f : 2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         // Knob body
         const float bodyR = radius - 6.0f;

@@ -1,3 +1,4 @@
+#include <map>
 #include "PluginEditor.h"
 #include "Params.h"
 
@@ -149,6 +150,7 @@ UndertowAudioProcessorEditor::UndertowAudioProcessorEditor(UndertowAudioProcesso
         tabButtons[i].setButtonText(tabNames[i]);
         tabButtons[i].setClickingTogglesState(false);
         tabButtons[i].onClick = [this, i]() { setActiveTab(i); };
+        tabButtons[i].setTooltip("Show the " + juce::String(tabNames[i]) + " controls");
         addAndMakeVisible(tabButtons[i]);
     }
 
@@ -180,6 +182,9 @@ UndertowAudioProcessorEditor::UndertowAudioProcessorEditor(UndertowAudioProcesso
     syncPresetBox();
     presetBox.onChange = [this]() { applyPresetByBoxId(presetBox.getSelectedId()); };
     prevButton.onClick = [this]() { stepPreset(-1); };
+    presetBox.setTooltip("300 presets by genre. Use < > to step through them.");
+    prevButton.setTooltip("Previous preset");
+    nextButton.setTooltip("Next preset");
     nextButton.onClick = [this]() { stepPreset(1); };
 
     // Preset selector colours — neon green text so name and description pop.
@@ -201,6 +206,106 @@ UndertowAudioProcessorEditor::Section& UndertowAudioProcessorEditor::addSection(
     return section;
 }
 
+
+// A tooltip for every parameter (used when a control is created without one)
+static juce::String bpTooltip (const juce::String& id)
+{
+    static const std::map<juce::String, juce::String> t = {
+        { "oscModel", "Sound engine: Analog (two oscillators), Wavetable, or FM." },
+        { "oscWaveA", "Wave of oscillator A." },
+        { "oscWaveB", "Wave of oscillator B (Noise adds grit)." },
+        { "oscBGain", "Level of oscillator B." },
+        { "oscBPitch", "Pitch of oscillator B in semitones (detune it slightly for width)." },
+        { "hardSync", "Syncs oscillator B to A for a sharp, tearing tone." },
+        { "pulseWidth", "Square-wave width: hollow (50%) to thin and nasal." },
+        { "oscOctave", "Octave of the whole sound." },
+        { "oscSemitone", "Transpose in semitones." },
+        { "oscFineCents", "Fine tuning in cents." },
+        { "unisonVoices", "Stacked voices for a thicker sound." },
+        { "unisonDetune", "How far the stacked voices are detuned." },
+        { "unisonSpread", "Stereo spread of the stacked voices." },
+        { "wtPosition", "Wavetable only: position in the wavetable (morphs the tone)." },
+        { "wtWarp", "Wavetable only: bends the wave shape." },
+        { "fmRatio", "FM only: modulator ratio - whole numbers are musical, others metallic." },
+        { "fmIndex", "FM only: amount of FM - more is brighter and growlier." },
+        { "fmFeedback", "FM only: feedback - adds noise-like grit." },
+        { "amAmount", "Amplitude modulation amount." },
+        { "amTarget", "Which band the AM affects." },
+        { "bandsEnable", "3-Band mode: separate engines for Body (lows), Character (mids) and Air (highs)." },
+        { "crossoverLow", "Split point between Body and Character." },
+        { "crossoverHigh", "Split point between Character and Air." },
+        { "filterType", "Filter type." },
+        { "filterCutoff", "Filter brightness." },
+        { "filterResonance", "Filter resonance - the peak at the cutoff." },
+        { "filterDrive", "Drive into the filter for grit." },
+        { "filterEnvAmount", "How far the Mod envelope moves the filter (negative closes it)." },
+        { "filterKeyTrack", "Higher notes open the filter more." },
+        { "ampAttack", "Fade-in of each note." },
+        { "ampDecay", "Time to fall to the sustain level." },
+        { "ampSustain", "Level while a key is held." },
+        { "ampRelease", "Fade-out after the key is released." },
+        { "modAttack", "Mod envelope attack (drives the filter)." },
+        { "modDecay", "Mod envelope decay - short for plucks." },
+        { "modSustain", "Mod envelope sustain." },
+        { "modRelease", "Mod envelope release." },
+        { "lfoShape", "LFO wave shape." },
+        { "lfoRate", "LFO speed." },
+        { "lfoDepth", "LFO amount." },
+        { "lfoDestination", "What the LFO moves: pitch, filter or pulse width." },
+        { "masterDrive", "Output saturation for weight." },
+        { "masterGain", "Output level." },
+        { "chorusEnable", "Chorus on/off." },
+        { "chorusRate", "Chorus speed." },
+        { "chorusDepth", "Chorus depth." },
+        { "chorusFeedback", "Chorus feedback (flanger-like at high values)." },
+        { "chorusMix", "Chorus amount." },
+        { "delayEnable", "Delay on/off." },
+        { "delayTimeMs", "Delay time." },
+        { "delayFeedback", "Number of echoes." },
+        { "delayMix", "Delay amount." },
+        { "reverbEnable", "Reverb on/off." },
+        { "reverbRoom", "Reverb size." },
+        { "reverbDamp", "Darkens the reverb tail." },
+        { "reverbWet", "Reverb amount." },
+        { "reverbWidth", "Reverb stereo width." },
+        { "polyphonyMode", "Mono (one note, with glide) or Poly." },
+        { "glideTimeMs", "Pitch slide time between notes (mono)." },
+        { "legato", "Glide only when notes overlap." },
+        { "bodyModel", "Body (lows) band engine." },
+        { "bodyGain", "Body (lows) band level." },
+        { "bodyPan", "Body (lows) band stereo position." },
+        { "bodyPitch", "Body (lows) band pitch offset (semitones)." },
+        { "bodyActive", "Body (lows) band on/off." },
+        { "bodyFilterOn", "Filter on the Body (lows) band." },
+        { "bodyFilterType", "Body (lows) band filter type." },
+        { "bodyFilterCut", "Body (lows) band filter cutoff." },
+        { "bodyFilterRes", "Body (lows) band filter resonance." },
+        { "bodyDrive", "Body (lows) band drive." },
+        { "charModel", "Character (mids) band engine." },
+        { "charGain", "Character (mids) band level." },
+        { "charPan", "Character (mids) band stereo position." },
+        { "charPitch", "Character (mids) band pitch offset (semitones)." },
+        { "charActive", "Character (mids) band on/off." },
+        { "charFilterOn", "Filter on the Character (mids) band." },
+        { "charFilterType", "Character (mids) band filter type." },
+        { "charFilterCut", "Character (mids) band filter cutoff." },
+        { "charFilterRes", "Character (mids) band filter resonance." },
+        { "charDrive", "Character (mids) band drive." },
+        { "airModel", "Air (highs) band engine." },
+        { "airGain", "Air (highs) band level." },
+        { "airPan", "Air (highs) band stereo position." },
+        { "airPitch", "Air (highs) band pitch offset (semitones)." },
+        { "airActive", "Air (highs) band on/off." },
+        { "airFilterOn", "Filter on the Air (highs) band." },
+        { "airFilterType", "Air (highs) band filter type." },
+        { "airFilterCut", "Air (highs) band filter cutoff." },
+        { "airFilterRes", "Air (highs) band filter resonance." },
+        { "airDrive", "Air (highs) band drive." },
+    };
+    const auto it = t.find (id);
+    return it != t.end() ? it->second + "  (double-click: reset)" : juce::String();
+}
+
 UndertowAudioProcessorEditor::Knob& UndertowAudioProcessorEditor::addKnob(
     Section& section, const juce::String& paramID, const juce::String& labelText,
     const juce::String& tip)
@@ -209,16 +314,20 @@ UndertowAudioProcessorEditor::Knob& UndertowAudioProcessorEditor::addKnob(
     auto& knob = *allKnobs.back();
 
     knob.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 16);
-    if (tip.isNotEmpty()) knob.slider.setTooltip(tip);
+    knob.slider.setMouseDragSensitivity(180);   // snappier: less travel per turn
+    const juce::String tipText = tip.isNotEmpty() ? tip : bpTooltip(paramID);
+    knob.slider.setTooltip(tipText);
     addAndMakeVisible(knob.slider);
 
     knob.label.setText(labelText, juce::dontSendNotification);
     knob.label.setJustificationType(juce::Justification::centred);
     knob.label.setFont(juce::Font(11.5f));
-    if (tip.isNotEmpty()) knob.label.setTooltip(tip);
+    knob.label.setTooltip(tipText);
     addAndMakeVisible(knob.label);
 
     knob.attachment = std::make_unique<APVTS::SliderAttachment>(processor.apvts, paramID, knob.slider);
+    if (auto* prm = processor.apvts.getParameter(paramID))
+        knob.slider.setDoubleClickReturnValue(true, (double) processor.apvts.getParameterRange(paramID).convertFrom0to1(prm->getDefaultValue()));
 
     section.knobs.push_back(&knob);
     return knob;
@@ -234,13 +343,14 @@ UndertowAudioProcessorEditor::Combo& UndertowAudioProcessorEditor::addCombo(
     if (auto* param = dynamic_cast<juce::AudioParameterChoice*>(processor.apvts.getParameter(paramID)))
         combo.box.addItemList(param->choices, 1);
 
-    if (tip.isNotEmpty()) combo.box.setTooltip(tip);
+    const juce::String comboTip = tip.isNotEmpty() ? tip : bpTooltip(paramID).upToFirstOccurrenceOf("  (", false, false);
+    combo.box.setTooltip(comboTip);
     addAndMakeVisible(combo.box);
 
     combo.label.setText(labelText, juce::dontSendNotification);
     combo.label.setJustificationType(juce::Justification::centred);
     combo.label.setFont(juce::Font(11.5f));
-    if (tip.isNotEmpty()) combo.label.setTooltip(tip);
+    combo.label.setTooltip(comboTip);
     addAndMakeVisible(combo.label);
 
     combo.attachment = std::make_unique<APVTS::ComboBoxAttachment>(processor.apvts, paramID, combo.box);
@@ -257,7 +367,7 @@ UndertowAudioProcessorEditor::Toggle& UndertowAudioProcessorEditor::addToggle(
     auto& toggle = *allToggles.back();
 
     toggle.button.setButtonText(labelText);
-    if (tip.isNotEmpty()) toggle.button.setTooltip(tip);
+    toggle.button.setTooltip(tip.isNotEmpty() ? tip : bpTooltip(paramID).upToFirstOccurrenceOf("  (", false, false));
     addAndMakeVisible(toggle.button);
 
     toggle.attachment = std::make_unique<APVTS::ButtonAttachment>(processor.apvts, paramID, toggle.button);

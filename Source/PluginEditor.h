@@ -91,7 +91,7 @@ private:
     Toggle& addToggle(Section& section, const juce::String& paramID, const juce::String& labelText, const juce::String& tip = {});
     Section& addSection(const juce::String& title);
 
-    juce::TooltipWindow tooltipWindow { this, 500 };
+    juce::TooltipWindow tooltipWindow { this, 450 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UndertowAudioProcessorEditor)
 };
