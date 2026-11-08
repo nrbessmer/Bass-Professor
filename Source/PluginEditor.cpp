@@ -489,18 +489,14 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds();
 
-    // Background gradient
-    juce::ColourGradient bg(BPColours::bgTop, 0.0f, 0.0f,
-                             BPColours::bgBottom, 0.0f, (float) getHeight(), false);
-    g.setGradientFill(bg);
-    g.fillRect(bounds);
+    neon::paintBackdrop (g, bounds, BPColours::accent, backdrop);
 
     // Logo as full-bleed watermark at the bottom of the layer stack.
     // MUST be drawn before any fills — panels use borders only (no fill)
     // so the logo shows through at full opacity.
     if (logoImage.isValid())
     {
-        g.setOpacity(0.30f);
+        g.setOpacity(0.22f);
         g.drawImage(logoImage, getLocalBounds().toFloat(),
                     juce::RectanglePlacement::centred | juce::RectanglePlacement::fillDestination);
         g.setOpacity(1.0f);
@@ -508,10 +504,10 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
 
     // Header bar
     auto header = bounds.removeFromTop(headerHeight);
-    g.setColour(BPColours::panel);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.6f), 0, 0, juce::Colours::black.withAlpha (0.2f), 0, (float) headerHeight, false));
     g.fillRect(header);
-    g.setColour(BPColours::accent);
-    g.fillRect(header.removeFromBottom(2)); // accent underline
+    g.setGradientFill (juce::ColourGradient (neon::Pal::pink, 0, 0, neon::Pal::cyan, (float) getWidth(), 0, false));
+    g.fillRect(header.removeFromBottom(2)); // brand underline
 
     // Title block \u2014 logo thumbnail on the left, wordmark text always shown.
     static constexpr int titleBlockW = 260;
@@ -524,11 +520,8 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
     }
     const int textX = logoImage.isValid() ? logoSize + 8 : 10;
     // "BASS PROFESSOR" wordmark
-    g.setColour(BPColours::accent);
-    g.setFont(juce::Font(20.0f, juce::Font::bold));
-    g.drawText("BASS PROFESSOR",
-                juce::Rectangle<int>(textX, 6, titleBlockW - textX - 4, headerHeight - 24),
-                juce::Justification::bottomLeft, false);
+    neon::glowText (g, "BASS PROFESSOR", juce::Rectangle<int> (textX, 6, titleBlockW - textX + 40, headerHeight - 24).toFloat(),
+                    BPColours::accent, 21.0f, juce::Justification::bottomLeft);
     g.setColour(BPColours::textDim);
     g.setFont(juce::Font(10.0f));
     g.drawText("3-BAND BASS SYNTHESIZER",
@@ -537,7 +530,8 @@ void UndertowAudioProcessorEditor::paint(juce::Graphics& g)
 
     // Tully EDM Vibe logo, left of the copyright / email block
     {
-        static const juce::Image tully = juce::ImageCache::getFromMemory (TullyLogoData::png, (int) TullyLogoData::pngSize);
+        if (! tullyImage.isValid()) tullyImage = juce::ImageCache::getFromMemory (TullyLogoData::png, (int) TullyLogoData::pngSize);
+        const auto& tully = tullyImage;   // member: a function-static Image outlives JUCE at host quit
         if (tully.isValid())
         {
             const int lh = headerHeight - 10;

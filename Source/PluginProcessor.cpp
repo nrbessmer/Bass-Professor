@@ -27,6 +27,7 @@ void UndertowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     heldNotes.clear();
 
     juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock, 2 };
+    chorusMaxBlock = juce::jmax (1, samplesPerBlock);
     chorus.prepare(spec);
     delay.prepare(sampleRate, samplesPerBlock);
     reverb.prepare(spec);
@@ -174,9 +175,15 @@ void UndertowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         chorus.setMix(apvts.getRawParameterValue(Params::chorusMix)->load());
         chorus.setCentreDelay(7.0f);
 
+        // juce::dsp::Chorus has scratch sized for the prepared block: hosts may send
+        // larger blocks (offline bounce, some AU hosts), so feed it in chunks.
         juce::dsp::AudioBlock<float> block(buffer);
-        juce::dsp::ProcessContextReplacing<float> context(block);
-        chorus.process(context);
+        for (size_t pos = 0; pos < block.getNumSamples(); pos += (size_t) chorusMaxBlock)
+        {
+            auto sub = block.getSubBlock (pos, juce::jmin ((size_t) chorusMaxBlock, block.getNumSamples() - pos));
+            juce::dsp::ProcessContextReplacing<float> context(sub);
+            chorus.process(context);
+        }
     }
 
     // Delay
@@ -243,7 +250,8 @@ void UndertowAudioProcessor::setStateInformation(const void* data, int sizeInByt
         {
             auto tree = juce::ValueTree::fromXml(*xml);
             if (tree.hasProperty("currentPreset"))
-                currentPreset = (int) tree.getProperty("currentPreset");
+                currentPreset = juce::jlimit (-1, (int) BPPresets::getAll().size() - 1,
+                                              (int) tree.getProperty("currentPreset"));
             apvts.replaceState(tree);
         }
     }

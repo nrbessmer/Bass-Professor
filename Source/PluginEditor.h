@@ -40,7 +40,8 @@ private:
     void updateControlVisibility();
 
     // Logo image (loaded from BinaryData if available, blank otherwise).
-    juce::Image logoImage;
+    juce::Image logoImage, tullyImage;
+    neon::BackdropCache backdrop;
 
     // Clickable email link in the header — opens default mail client via mailto:.
     juce::HyperlinkButton emailLink { "info@tullyedmvibe.com",

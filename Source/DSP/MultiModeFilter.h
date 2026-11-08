@@ -26,7 +26,8 @@ public:
     // cutoffHz should already include keytrack/envelope/LFO modulation.
     void setCutoffAndResonance(float cutoffHz, float resonanceQ)
     {
-        cutoffHz = juce::jlimit(20.0f, 20000.0f, cutoffHz);
+        // keep below Nyquist: at 22.05-32 kHz a 20 kHz cap still made tan() wrap negative -> NaN
+        cutoffHz = juce::jlimit(20.0f, juce::jmin(20000.0f, 0.45f * (float) sampleRate), cutoffHz);
         resonanceQ = juce::jmax(0.1f, resonanceQ);
 
         const float g = std::tan(juce::MathConstants<float>::pi * cutoffHz / (float) sampleRate);

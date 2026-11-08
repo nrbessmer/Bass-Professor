@@ -67,6 +67,7 @@ private:
                          int startSample, int numSamples);
 
     juce::dsp::Chorus<float> chorus;
+    int chorusMaxBlock = 512;
     StereoDelay delay;
     juce::dsp::Reverb reverb;
 
