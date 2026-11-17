@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "TullyLicence.h"
 #include "PluginEditor.h"
 #include "DSP/Utils.h"
 #include "Presets.h"
@@ -9,6 +10,8 @@ UndertowAudioProcessor::UndertowAudioProcessor()
       apvts(*this, nullptr, "PARAMETERS", Params::createParameterLayout()),
       monoVoice(apvts)
 {
+    tully::licence ("Bass Professor");   // purchase activation (TullyLicence.h)
+
     for (int i = 0; i < numVoices; ++i)
         synth.addVoice(new UndertowVoice(apvts));
 
@@ -129,6 +132,8 @@ void UndertowAudioProcessor::renderMonoBlock(juce::AudioBuffer<float>& buffer,
 
 void UndertowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    if (! tully::licence().ok()) { buffer.clear(); midiMessages.clear(); return; }   // not activated yet: silent
+
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 

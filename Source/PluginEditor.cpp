@@ -1,4 +1,5 @@
 #include <map>
+#include "TullyLicence.h"
 #include "PluginEditor.h"
 #include "TullyLogoData.h"
 #include "Params.h"
@@ -197,6 +198,8 @@ UndertowAudioProcessorEditor::UndertowAudioProcessorEditor(UndertowAudioProcesso
     presetDescription.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(presetDescription);
     updatePresetDescription();
+
+    tully::addActivation (*this);   // activation screen until this Mac is licensed
 }
 
 UndertowAudioProcessorEditor::Section& UndertowAudioProcessorEditor::addSection(const juce::String& title)
